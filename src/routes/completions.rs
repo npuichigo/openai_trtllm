@@ -4,17 +4,39 @@ use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use std::convert::Infallible;
+use std::time::Duration;
+use tokio::sync::mpsc::{unbounded_channel, UnboundedSender};
+use tracing::instrument;
 
+#[instrument(name = "completions", skip(request))]
 pub async fn compat_completions(request: Json<CompletionRequest>) -> Response {
     tracing::debug!(
         "Received request with streaming set to: {}",
         &request.stream
     );
-    let response = Json(CompletionResponse {
+
+    if request.stream {
+        todo!()
+    } else {
+        completions(request).await.into_response()
+    }
+}
+
+#[instrument(name = "non-streaming completions", skip(request))]
+pub async fn completions(Json(request): Json<CompletionRequest>) -> Json<CompletionResponse> {
+    let (tx, mut rx) = unbounded_channel();
+    tokio::spawn(handle_request(request, tx));
+
+    while let Some(streaming_response) = rx.recv().await {
+        tracing::info!("Received streaming response: {:?}", streaming_response);
+    }
+
+    Json(CompletionResponse {
         id: "fake-id".to_string(),
         object: "text_completion".to_string(),
         created: 0,
-        model: request.model.clone(),
+        model: "fake-model".to_string(),
         choices: vec![CompletionResponseChoices {
             text: "fake-text".to_string(),
             index: 0,
@@ -22,8 +44,25 @@ pub async fn compat_completions(request: Json<CompletionRequest>) -> Response {
             finish_reason: None,
         }],
         usage: None,
-    });
-    response.into_response()
+    })
+}
+
+#[derive(Debug)]
+struct StreamingResponse {
+    token: String,
+}
+
+#[instrument(skip(_request, response_tx))]
+async fn handle_request(
+    _request: CompletionRequest,
+    response_tx: UnboundedSender<Result<StreamingResponse, Infallible>>,
+) {
+    let response = StreamingResponse {
+        token: "hello".to_string(),
+    };
+    if response_tx.send(Ok(response)).is_err() {
+        tracing::info!("Client receive channel closed");
+    }
 }
 
 #[derive(Deserialize, Debug)]
