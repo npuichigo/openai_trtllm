@@ -985,6 +985,8 @@ dependencies = [
  "opentelemetry",
  "opentelemetry-jaeger",
  "opentelemetry-otlp",
+ "prost 0.12.1",
+ "prost-types",
  "serde",
  "tokio",
  "tonic 0.10.2",
