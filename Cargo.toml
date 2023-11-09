@@ -12,7 +12,7 @@ tokio = { version = "1.33.0", features = ["full"] }
 tonic = "0.10.2"
 prost = "0.12.1"
 prost-types = "0.12.1"
-anyhow = "1.0.75"
+anyhow = { version = "1.0.75", features = ["backtrace"] }
 clap = {version = "4.4.7", features = ["derive"]}
 figment = { version = "0.10.12", features = ["env"] }
 serde = { version = "1.0.190", features = ["derive"] }

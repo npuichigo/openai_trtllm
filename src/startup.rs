@@ -1,5 +1,7 @@
 use crate::config::Config;
 use crate::routes;
+use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
+use anyhow::Context;
 use axum::routing::{get, post};
 use axum::Router;
 use axum_prometheus::PrometheusMetricLayer;
@@ -16,10 +18,15 @@ use tracing::Level;
 pub async fn run_server(config: Config) -> anyhow::Result<()> {
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
 
+    let grpc_client = GrpcInferenceServiceClient::connect(config.triton_endpoint)
+        .await
+        .context("failed to connect triton endpoint")?;
+
     let app = Router::new()
         .route("/v1/completions", post(routes::compat_completions))
         .route("/health_check", get(routes::health_check))
         .route("/metrics", get(|| async move { metric_handle.render() }))
+        .with_state(grpc_client)
         .layer(prometheus_layer)
         .layer(OtelInResponseLayer)
         .layer(OtelAxumLayer::default())
