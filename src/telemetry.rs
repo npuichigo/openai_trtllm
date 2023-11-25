@@ -1,7 +1,7 @@
-use opentelemetry::sdk::trace as sdktrace;
-use opentelemetry::sdk::{runtime, Resource};
 use opentelemetry::trace::TraceError;
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::trace as sdktrace;
+use opentelemetry_sdk::{runtime, Resource};
 use tracing::subscriber::set_global_default;
 use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
 use tracing_log::LogTracer;

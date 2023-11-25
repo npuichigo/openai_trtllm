@@ -2,6 +2,10 @@ use serde::{de, Deserialize, Deserializer};
 use std::fmt;
 use std::marker::PhantomData;
 
+use bytes::{Buf, Bytes};
+use std::str;
+use std::str::Utf8Error;
+
 pub(crate) fn string_or_seq_string<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where
     D: Deserializer<'de>,
@@ -31,4 +35,18 @@ where
     }
 
     deserializer.deserialize_any(StringOrVec(PhantomData))
+}
+
+pub(crate) fn deserialize_bytes_tensor(encoded_tensor: Vec<u8>) -> Result<Vec<String>, Utf8Error> {
+    let mut bytes = Bytes::from(encoded_tensor);
+    let mut strs = Vec::new();
+    while bytes.has_remaining() {
+        let len = bytes.get_u32_le() as usize;
+        if len <= bytes.remaining() {
+            let slice = bytes.split_to(len);
+            let s = str::from_utf8(&slice)?;
+            strs.push(s.to_string());
+        }
+    }
+    Ok(strs)
 }

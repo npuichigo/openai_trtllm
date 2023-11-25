@@ -38,12 +38,12 @@ pub async fn run_server(config: Config) -> anyhow::Result<()> {
                         .make_span_with(
                             DefaultMakeSpan::new()
                                 .include_headers(true)
-                                .level(Level::INFO),
+                                .level(Level::DEBUG),
                         )
                         .on_response(
                             DefaultOnResponse::new()
                                 .include_headers(true)
-                                .level(Level::INFO),
+                                .level(Level::DEBUG),
                         ),
                 )
                 .propagate_x_request_id(),
