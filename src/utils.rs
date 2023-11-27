@@ -1,10 +1,10 @@
-use serde::{de, Deserialize, Deserializer};
 use std::fmt;
 use std::marker::PhantomData;
-
-use bytes::{Buf, Bytes};
 use std::str;
 use std::str::Utf8Error;
+
+use bytes::{Buf, Bytes};
+use serde::{de, Deserialize, Deserializer};
 
 pub(crate) fn string_or_seq_string<'de, D>(deserializer: D) -> Result<Vec<String>, D::Error>
 where

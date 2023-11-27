@@ -1,6 +1,7 @@
 use clap::Parser;
 use figment::providers::{Env, Serialized};
 use figment::Figment;
+
 use openai_trtllm::config::Config;
 use openai_trtllm::startup;
 use openai_trtllm::telemetry;
