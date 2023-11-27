@@ -1,18 +1,22 @@
 //! https://platform.openai.com/docs/api-reference/completions/create
-use crate::error::AppError;
-use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
-use crate::triton::model_infer_request::InferInputTensor;
-use crate::triton::{InferTensorContents, ModelInferRequest};
-use crate::utils::{deserialize_bytes_tensor, string_or_seq_string};
+use std::collections::HashMap;
+use std::iter::IntoIterator;
+use std::time::{SystemTime, UNIX_EPOCH};
+
 use anyhow::Context;
+use async_stream::stream;
 use axum::extract::State;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::iter::IntoIterator;
 use tonic::transport::Channel;
 use tracing::instrument;
+use uuid::Uuid;
+
+use crate::error::AppError;
+use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
+use crate::triton::request::{Builder, InferTensorData};
+use crate::utils::{deserialize_bytes_tensor, string_or_seq_string};
 
 #[instrument(name = "completions", skip(client, request))]
 pub async fn compat_completions(
@@ -36,71 +40,42 @@ pub async fn completions(
     State(mut client): State<GrpcInferenceServiceClient<Channel>>,
     Json(request): Json<CompletionRequest>,
 ) -> Result<Json<CompletionResponse>, AppError> {
-    let prompt = request.prompt[0].clone();
-    let infer_request = async_stream::stream! {
-        yield ModelInferRequest {
-            model_name: request.model,
-            inputs: vec![
-                InferInputTensor {
-                    name: "text_input".to_string(),
-                    shape: vec![1, 1],
-                    datatype: "BYTES".to_string(),
-                    contents: Some(InferTensorContents {
-                        bytes_contents: request
-                            .prompt
-                            .iter()
-                            .map(|s| s.as_bytes().to_vec())
-                            .collect(),
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                InferInputTensor {
-                    name: "max_tokens".to_string(),
-                    shape: vec![1, 1],
-                    datatype: "UINT32".to_string(),
-                    contents: Some(InferTensorContents {
-                        uint_contents: vec![request.max_tokens as u32],
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                InferInputTensor {
-                    name: "bad_words".to_string(),
-                    shape: vec![1, 1],
-                    datatype: "BYTES".to_string(),
-                    contents: Some(InferTensorContents {
-                        bytes_contents: vec!["".as_bytes().to_vec()],
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                InferInputTensor {
-                    name: "stop_words".to_string(),
-                    shape: vec![1, 1],
-                    datatype: "BYTES".to_string(),
-                    contents: Some(InferTensorContents {
-                        bytes_contents: vec!["".as_bytes().to_vec()],
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                },
-                InferInputTensor {
-                    name: "end_id".to_string(),
-                    shape: vec![1, 1],
-                    datatype: "UINT32".to_string(),
-                    contents: Some(InferTensorContents {
-                        uint_contents: vec![2u32],
-                        ..Default::default()
-                    }),
-                    ..Default::default()
-                }
-            ],
-            ..Default::default()
-        };
-    };
+    let model_name = request.model.clone();
+    let request = Builder::new()
+        .model_name(request.model)
+        .input(
+            "text_input",
+            [1, 1],
+            InferTensorData::Bytes(
+                request
+                    .prompt
+                    .into_iter()
+                    .map(|s| s.as_bytes().to_vec())
+                    .collect(),
+            ),
+        )
+        .input(
+            "max_tokens",
+            [1, 1],
+            InferTensorData::UInt32(vec![request.max_tokens as u32]),
+        )
+        .input(
+            "bad_words",
+            [1, 1],
+            InferTensorData::Bytes(vec!["".as_bytes().to_vec()]),
+        )
+        .input(
+            "stop_words",
+            [1, 1],
+            InferTensorData::Bytes(vec!["".as_bytes().to_vec()]),
+        )
+        .input("end_id", [1, 1], InferTensorData::UInt32(vec![2u32]))
+        .build()
+        .context("failed to build triton request")?;
+
+    let request_stream = stream! { yield request };
     let mut stream = client
-        .model_stream_infer(tonic::Request::new(infer_request))
+        .model_stream_infer(tonic::Request::new(request_stream))
         .await
         .context("failed to call triton grpc method model_stream_infer")?
         .into_inner();
@@ -129,10 +104,10 @@ pub async fn completions(
     }
 
     Ok(Json(CompletionResponse {
-        id: "fake-id".to_string(),
+        id: format!("cmpl-{}", Uuid::new_v4()),
         object: "text_completion".to_string(),
-        created: 0,
-        model: "fake-model".to_string(),
+        created: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
+        model: model_name,
         choices: vec![CompletionResponseChoices {
             text: contents.into_iter().collect(),
             index: 0,
@@ -223,6 +198,7 @@ struct CompletionResponseChoices {
     finish_reason: Option<FinishReason>,
 }
 
+#[allow(dead_code)]
 #[derive(Serialize, Debug)]
 pub enum FinishReason {
     /// The model hit a natural stop point or a provided stop sequence.
