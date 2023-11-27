@@ -1,8 +1,10 @@
+use std::fmt::Debug;
+
 use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
-use std::fmt::Debug;
+
 pub struct AppError(anyhow::Error);
 
 impl Debug for AppError {

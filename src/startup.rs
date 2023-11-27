@@ -1,6 +1,3 @@
-use crate::config::Config;
-use crate::routes;
-use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
 use anyhow::Context;
 use axum::routing::{get, post};
 use axum::Router;
@@ -14,6 +11,10 @@ use tower_http::{
     ServiceBuilderExt,
 };
 use tracing::Level;
+
+use crate::config::Config;
+use crate::routes;
+use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
 
 pub async fn run_server(config: Config) -> anyhow::Result<()> {
     let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
