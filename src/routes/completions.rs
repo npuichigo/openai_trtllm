@@ -4,21 +4,26 @@ use std::iter::IntoIterator;
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use anyhow::Context;
-use async_stream::stream;
+use async_stream::{stream, try_stream};
 use axum::extract::State;
+use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
 use serde::{Deserialize, Serialize};
+use serde_json::json;
+use tonic::codegen::tokio_stream::Stream;
 use tonic::transport::Channel;
+use tracing;
 use tracing::instrument;
 use uuid::Uuid;
 
 use crate::error::AppError;
 use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
 use crate::triton::request::{Builder, InferTensorData};
+use crate::triton::ModelInferRequest;
 use crate::utils::{deserialize_bytes_tensor, string_or_seq_string};
 
-#[instrument(name = "completions", skip(client, request))]
+#[instrument(name = "completions", skip(client))]
 pub async fn compat_completions(
     client: State<GrpcInferenceServiceClient<Channel>>,
     request: Json<CompletionRequest>,
@@ -29,10 +34,73 @@ pub async fn compat_completions(
     );
 
     if request.stream {
-        todo!()
+        completions_stream(client, request).await.into_response()
     } else {
         completions(client, request).await.into_response()
     }
+}
+
+#[instrument(name = "streaming completions", skip(client, request))]
+pub async fn completions_stream(
+    State(mut client): State<GrpcInferenceServiceClient<Channel>>,
+    Json(request): Json<CompletionRequest>,
+) -> Result<Sse<impl Stream<Item = anyhow::Result<Event>>>, AppError> {
+    let model_name = request.model.clone();
+    let request = build_triton_request(request)?;
+
+    let response_stream = try_stream! {
+        let request_stream = stream! { yield request };
+
+        let mut stream = client
+            .model_stream_infer(tonic::Request::new(request_stream))
+            .await
+            .context("failed to call triton grpc method model_stream_infer")?
+            .into_inner();
+
+        while let Some(response) = stream.message().await? {
+            if !response.error_message.is_empty() {
+                tracing::error!("received error message from triton: {}", response.error_message);
+
+                // Corresponds to https://github.com/openai/openai-python/blob/17ac6779958b2b74999c634c4ea4c7b74906027a/src/openai/_streaming.py#L113
+                yield Event::default().event("error").json_data(json!({
+                    "error": {
+                        "status_code": 500,
+                        "message": "Internal Server Error"
+                    }
+                })).unwrap();
+                return;
+            }
+            let infer_response = response
+                .infer_response
+                .context("empty infer response received")?;
+            let raw_content = infer_response
+                .raw_output_contents
+                .get(0)
+                .context("empty raw output contents")?;
+            let content = deserialize_bytes_tensor(raw_content.clone())?
+                .into_iter()
+                .map(|s| s.trim().replace("</s>", ""))
+                .collect::<String>();
+
+            let response = CompletionResponse {
+                id: format!("cmpl-{}", Uuid::new_v4()),
+                object: "text_completion".to_string(),
+                created: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
+                model: model_name.clone(),
+                choices: vec![CompletionResponseChoices {
+                    text: content,
+                    index: 0,
+                    logprobs: None,
+                    finish_reason: None,
+                }],
+                usage: None,
+            };
+
+            yield Event::default().json_data(response).unwrap();
+        }
+    };
+
+    Ok(Sse::new(response_stream).keep_alive(KeepAlive::default()))
 }
 
 #[instrument(name = "non-streaming completions", skip(client, request), err(Debug))]
@@ -41,38 +109,7 @@ pub async fn completions(
     Json(request): Json<CompletionRequest>,
 ) -> Result<Json<CompletionResponse>, AppError> {
     let model_name = request.model.clone();
-    let request = Builder::new()
-        .model_name(request.model)
-        .input(
-            "text_input",
-            [1, 1],
-            InferTensorData::Bytes(
-                request
-                    .prompt
-                    .into_iter()
-                    .map(|s| s.as_bytes().to_vec())
-                    .collect(),
-            ),
-        )
-        .input(
-            "max_tokens",
-            [1, 1],
-            InferTensorData::UInt32(vec![request.max_tokens as u32]),
-        )
-        .input(
-            "bad_words",
-            [1, 1],
-            InferTensorData::Bytes(vec!["".as_bytes().to_vec()]),
-        )
-        .input(
-            "stop_words",
-            [1, 1],
-            InferTensorData::Bytes(vec!["".as_bytes().to_vec()]),
-        )
-        .input("end_id", [1, 1], InferTensorData::UInt32(vec![2u32]))
-        .build()
-        .context("failed to build triton request")?;
-
+    let request = build_triton_request(request)?;
     let request_stream = stream! { yield request };
     let mut stream = client
         .model_stream_infer(tonic::Request::new(request_stream))
@@ -116,6 +153,40 @@ pub async fn completions(
         }],
         usage: None,
     }))
+}
+
+fn build_triton_request(request: CompletionRequest) -> anyhow::Result<ModelInferRequest> {
+    Builder::new()
+        .model_name(request.model)
+        .input(
+            "text_input",
+            [1, 1],
+            InferTensorData::Bytes(
+                request
+                    .prompt
+                    .into_iter()
+                    .map(|s| s.as_bytes().to_vec())
+                    .collect(),
+            ),
+        )
+        .input(
+            "max_tokens",
+            [1, 1],
+            InferTensorData::UInt32(vec![request.max_tokens as u32]),
+        )
+        .input(
+            "bad_words",
+            [1, 1],
+            InferTensorData::Bytes(vec!["".as_bytes().to_vec()]),
+        )
+        .input(
+            "stop_words",
+            [1, 1],
+            InferTensorData::Bytes(vec!["".as_bytes().to_vec()]),
+        )
+        .input("end_id", [1, 1], InferTensorData::UInt32(vec![2u32]))
+        .build()
+        .context("failed to build triton request")
 }
 
 #[derive(Deserialize, Debug)]

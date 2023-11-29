@@ -16,31 +16,40 @@ impl Builder {
         self.inner
     }
 
-    pub(crate) fn model_name(self, model_name: String) -> Self {
-        self.and_then(|mut request| {
-            request.model_name = model_name;
-            Ok(request)
-        })
-    }
-
-    fn model_version<T>(self, model_version: String) -> Self {
-        self.and_then(|mut request| {
-            request.model_version = model_version;
-            Ok(request)
-        })
-    }
-
-    fn id(self, id: String) -> Self {
-        self.and_then(|mut request| {
-            request.id = id;
-            Ok(request)
-        })
-    }
-
-    pub(crate) fn input<T, S>(self, name: T, shape: S, data: InferTensorData) -> Self
+    pub(crate) fn model_name<S>(self, model_name: S) -> Self
     where
-        T: Into<String>,
-        S: Into<Vec<i64>>,
+        S: Into<String>,
+    {
+        self.and_then(|mut request| {
+            request.model_name = model_name.into();
+            Ok(request)
+        })
+    }
+
+    fn model_version<S>(self, model_version: S) -> Self
+    where
+        S: Into<String>,
+    {
+        self.and_then(|mut request| {
+            request.model_version = model_version.into();
+            Ok(request)
+        })
+    }
+
+    fn id<S>(self, id: S) -> Self
+    where
+        S: Into<String>,
+    {
+        self.and_then(|mut request| {
+            request.id = id.into();
+            Ok(request)
+        })
+    }
+
+    pub(crate) fn input<S, V>(self, name: S, shape: V, data: InferTensorData) -> Self
+    where
+        S: Into<String>,
+        V: Into<Vec<i64>>,
     {
         self.and_then(|mut request| {
             request.inputs.push(InferInputTensor {
