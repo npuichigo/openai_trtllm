@@ -25,6 +25,10 @@ pub async fn run_server(config: Config) -> anyhow::Result<()> {
 
     let app = Router::new()
         .route("/v1/completions", post(routes::compat_completions))
+        .route(
+            "/v1/chat/completions",
+            post(routes::compat_chat_completions),
+        )
         .route("/health_check", get(routes::health_check))
         .route("/metrics", get(|| async move { metric_handle.render() }))
         .with_state(grpc_client)

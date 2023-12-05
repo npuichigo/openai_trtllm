@@ -1,4 +1,4 @@
-//! https://platform.openai.com/docs/api-reference/completions/create
+//! https://platform.openai.com/docs/api-reference/chat/create
 use std::collections::HashMap;
 use std::iter::IntoIterator;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -21,12 +21,12 @@ use crate::error::AppError;
 use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
 use crate::triton::request::{Builder, InferTensorData};
 use crate::triton::ModelInferRequest;
-use crate::utils::{deserialize_bytes_tensor, string_or_seq_string};
+use crate::utils::deserialize_bytes_tensor;
 
-#[instrument(name = "completions", skip(client))]
-pub(crate) async fn compat_completions(
+#[instrument(name = "chat_completions", skip(client))]
+pub(crate) async fn compat_chat_completions(
     client: State<GrpcInferenceServiceClient<Channel>>,
-    request: Json<CompletionCreateParams>,
+    request: Json<ChatCompletionCreateParams>,
 ) -> Response {
     tracing::debug!(
         "Received request with streaming set to: {}",
@@ -34,16 +34,18 @@ pub(crate) async fn compat_completions(
     );
 
     if request.stream {
-        completions_stream(client, request).await.into_response()
+        chat_completions_stream(client, request)
+            .await
+            .into_response()
     } else {
-        completions(client, request).await.into_response()
+        chat_completions(client, request).await.into_response()
     }
 }
 
-#[instrument(name = "streaming completions", skip(client, request))]
-async fn completions_stream(
+#[instrument(name = "streaming chat completions", skip(client, request))]
+async fn chat_completions_stream(
     State(mut client): State<GrpcInferenceServiceClient<Channel>>,
-    Json(request): Json<CompletionCreateParams>,
+    Json(request): Json<ChatCompletionCreateParams>,
 ) -> Result<Sse<impl Stream<Item = anyhow::Result<Event>>>, AppError> {
     let id = format!("cmpl-{}", Uuid::new_v4());
     let created = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
@@ -88,34 +90,38 @@ async fn completions_stream(
                 .collect::<String>();
 
             if !content.is_empty() {
-                let response = Completion {
+                let response = ChatCompletionChunk {
                     id: id.clone(),
                     object: "text_completion".to_string(),
                     created,
                     model: model_name.clone(),
-                    choices: vec![CompletionChoice {
-                        text: content,
+                    system_fingerprint: None,
+                    choices: vec![ChatCompletionChunkChoice {
                         index: 0,
-                        logprobs: None,
+                        delta: ChatCompletionChunkDelta {
+                            role: Some(Role::Assistant),
+                            content: Some(content),
+                        },
                         finish_reason: None,
                     }],
-                    usage: None,
                 };
                 yield Event::default().json_data(response).unwrap();
             }
         }
-        let response = Completion {
+        let response = ChatCompletionChunk {
             id,
             object: "text_completion".to_string(),
             created,
             model: model_name,
-            choices: vec![CompletionChoice {
-                text: String::new(),
+            system_fingerprint: None,
+            choices: vec![ChatCompletionChunkChoice {
                 index: 0,
-                logprobs: None,
+                delta: ChatCompletionChunkDelta {
+                    role: None,
+                    content: None,
+                },
                 finish_reason: Some(FinishReason::Stop),
             }],
-            usage: None,
         };
         yield Event::default().json_data(response).unwrap();
 
@@ -126,11 +132,15 @@ async fn completions_stream(
     Ok(Sse::new(response_stream).keep_alive(KeepAlive::default()))
 }
 
-#[instrument(name = "non-streaming completions", skip(client, request), err(Debug))]
-async fn completions(
+#[instrument(
+    name = "non-streaming chat completions",
+    skip(client, request),
+    err(Debug)
+)]
+async fn chat_completions(
     State(mut client): State<GrpcInferenceServiceClient<Channel>>,
-    Json(request): Json<CompletionCreateParams>,
-) -> Result<Json<Completion>, AppError> {
+    Json(request): Json<ChatCompletionCreateParams>,
+) -> Result<Json<ChatCompletion>, AppError> {
     let model_name = request.model.clone();
     let request = build_triton_request(request)?;
     let request_stream = stream! { yield request };
@@ -165,34 +175,32 @@ async fn completions(
         contents.push(content);
     }
 
-    Ok(Json(Completion {
+    Ok(Json(ChatCompletion {
         id: format!("cmpl-{}", Uuid::new_v4()),
         object: "text_completion".to_string(),
         created: SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs(),
         model: model_name,
-        choices: vec![CompletionChoice {
-            text: contents.into_iter().collect(),
+        system_fingerprint: None,
+        choices: vec![ChatCompletionChoice {
             index: 0,
-            logprobs: None,
+            message: ChatCompletionMessage {
+                role: Role::Assistant,
+                content: Some(contents.into_iter().collect()),
+            },
             finish_reason: Some(FinishReason::Stop),
         }],
         usage: None,
     }))
 }
 
-fn build_triton_request(request: CompletionCreateParams) -> anyhow::Result<ModelInferRequest> {
+fn build_triton_request(request: ChatCompletionCreateParams) -> anyhow::Result<ModelInferRequest> {
+    let chat_history = build_chat_history(request.messages);
     Builder::new()
         .model_name(request.model)
         .input(
             "text_input",
             [1, 1],
-            InferTensorData::Bytes(
-                request
-                    .prompt
-                    .into_iter()
-                    .map(|s| s.as_bytes().to_vec())
-                    .collect(),
-            ),
+            InferTensorData::Bytes(vec![chat_history.as_bytes().to_vec()]),
         )
         .input(
             "max_tokens",
@@ -218,22 +226,43 @@ fn build_triton_request(request: CompletionCreateParams) -> anyhow::Result<Model
         .context("failed to build triton request")
 }
 
+fn build_chat_history(messages: Vec<ChatCompletionMessageParams>) -> String {
+    let mut history = String::new();
+    for message in messages {
+        match message {
+            ChatCompletionMessageParams::System { content, name } => {
+                if let Some(name) = name {
+                    history.push_str(&format!("System {}: {}\n", name, content))
+                } else {
+                    history.push_str(&format!("System: {}\n", content))
+                }
+            }
+            ChatCompletionMessageParams::User { content, name } => {
+                if let Some(name) = name {
+                    history.push_str(&format!("User {}: {}\n", name, content))
+                } else {
+                    history.push_str(&format!("User: {}\n", content))
+                }
+            }
+            ChatCompletionMessageParams::Assistant { content, .. } => {
+                history.push_str(&format!("Assistant: {}\n", content))
+            }
+            ChatCompletionMessageParams::Tool { content, .. } => {
+                history.push_str(&format!("Tool: {}\n", content))
+            }
+        }
+    }
+    history.push_str("ASSISTANT:");
+    history
+}
+
 #[allow(dead_code)]
 #[derive(Deserialize, Debug)]
-pub(crate) struct CompletionCreateParams {
+pub(crate) struct ChatCompletionCreateParams {
+    /// A list of messages comprising the conversation so far.
+    messages: Vec<ChatCompletionMessageParams>,
     /// ID of the model to use.
     model: String,
-    /// The prompt(s) to generate completions for, encoded as a string, array of strings, array of
-    /// tokens, or array of token arrays.
-    #[serde(deserialize_with = "string_or_seq_string")]
-    prompt: Vec<String>,
-    /// Generates best_of completions server-side and returns the "best" (the one with the highest
-    /// log probability per token). Results cannot be streamed.
-    #[serde(default = "default_best_of")]
-    best_of: usize,
-    /// Echo back the prompt in addition to the completion
-    #[serde(default = "default_echo")]
-    echo: bool,
     /// Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing
     /// frequency in the text so far, decreasing the model's likelihood to repeat the same line
     /// verbatim.
@@ -241,8 +270,6 @@ pub(crate) struct CompletionCreateParams {
     frequency_penalty: f32,
     /// Modify the likelihood of specified tokens appearing in the completion.
     logit_bias: Option<HashMap<String, f32>>,
-    /// Include the log probabilities on the logprobs most likely tokens, as well the chosen tokens.
-    logprobs: Option<usize>,
     /// The maximum number of tokens to generate in the completion.
     #[serde(default = "default_max_tokens")]
     max_tokens: usize,
@@ -253,6 +280,10 @@ pub(crate) struct CompletionCreateParams {
     /// appear in the text so far, increasing the model's likelihood to talk about new topics.
     #[serde(default = "default_presence_penalty")]
     presence_penalty: f32,
+    /// An object specifying the format that the model must output.
+    /// Setting to { "type": "json_object" } enables JSON mode, which guarantees the message the
+    /// model generates is valid JSON.
+    response_format: Option<ResponseFormat>,
     /// If specified, our system will make a best effort to sample deterministically, such that
     /// repeated requests with the same seed and parameters should return the same result.
     seed: Option<usize>,
@@ -262,8 +293,6 @@ pub(crate) struct CompletionCreateParams {
     /// Whether to stream back partial progress.
     #[serde(default = "default_stream")]
     stream: bool,
-    /// The suffix that comes after a completion of inserted text.
-    suffix: Option<String>,
     /// What sampling temperature to use, between 0 and 2. Higher values like 0.8 will make the
     /// output more random, while lower values like 0.2 will make it more focused and deterministic.
     #[serde(default = "default_temperature")]
@@ -276,30 +305,75 @@ pub(crate) struct CompletionCreateParams {
     /// A unique identifier representing your end-user, which can help OpenAI to monitor and detect
     /// abuse.
     user: Option<String>,
+    // Not supported yet:
+    // tools
+    // tool_choices
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Debug)]
+#[serde(tag = "role", rename_all = "lowercase")]
+enum ChatCompletionMessageParams {
+    System {
+        content: String,
+        name: Option<String>,
+    },
+    User {
+        content: String,
+        name: Option<String>,
+    },
+    Assistant {
+        content: String,
+        // Not supported yet:
+        // tool_calls
+    },
+    Tool {
+        content: String,
+        tool_call_id: String,
+    },
+}
+
+#[allow(dead_code)]
+#[derive(Deserialize, Debug)]
+#[serde(tag = "type", rename_all = "snake_case")]
+enum ResponseFormat {
+    Text,
+    JsonObject,
 }
 
 #[derive(Serialize, Debug)]
-struct Completion {
+struct ChatCompletion {
     /// A unique identifier for the completion.
     id: String,
-    /// The object type, which is always "text_completion"
+    /// The object type, which is always "chat.completion"
     object: String,
     /// The Unix timestamp (in seconds) of when the completion was created.
     created: u64,
     /// The model used for completion.
     model: String,
+    /// This fingerprint represents the backend configuration that the model runs with.
+    system_fingerprint: Option<String>,
     /// The list of completion choices the model generated for the input prompt.
-    choices: Vec<CompletionChoice>,
+    choices: Vec<ChatCompletionChoice>,
     /// Usage statistics for the completion request.
     usage: Option<Usage>,
 }
 
 #[derive(Serialize, Debug)]
-struct CompletionChoice {
-    text: String,
+struct ChatCompletionChoice {
     index: usize,
-    logprobs: Option<()>,
+    message: ChatCompletionMessage,
     finish_reason: Option<FinishReason>,
+}
+
+#[derive(Serialize, Debug)]
+struct ChatCompletionMessage {
+    /// The role of the author of this message.
+    role: Role,
+    /// The contents of the chunk message.
+    content: Option<String>,
+    // Not supported yet:
+    // tool_calls
 }
 
 #[allow(dead_code)]
@@ -312,6 +386,8 @@ enum FinishReason {
     Length,
     /// Content was omitted due to a flag from our content filters.
     ContentFilter,
+    /// The model called a tool
+    ToolCalls,
 }
 
 #[derive(Serialize, Debug, Default)]
@@ -324,12 +400,50 @@ struct Usage {
     pub total_tokens: usize,
 }
 
-fn default_best_of() -> usize {
-    1
+#[derive(Serialize, Debug)]
+struct ChatCompletionChunk {
+    /// A unique identifier for the chat completion. Each chunk has the same ID.
+    id: String,
+    /// The object type, which is always chat.completion.chunk.
+    object: String,
+    /// The Unix timestamp (in seconds) of when the chat completion was created. Each chunk has
+    /// the same timestamp.
+    created: u64,
+    /// The model used for completion.
+    model: String,
+    /// This fingerprint represents the backend configuration that the model runs with.
+    system_fingerprint: Option<String>,
+    /// A list of chat completion choices. Can be more than one if n is greater than 1.
+    choices: Vec<ChatCompletionChunkChoice>,
 }
 
-fn default_echo() -> bool {
-    false
+#[derive(Serialize, Debug)]
+struct ChatCompletionChunkChoice {
+    index: usize,
+    delta: ChatCompletionChunkDelta,
+    finish_reason: Option<FinishReason>,
+}
+
+#[derive(Serialize, Debug)]
+struct ChatCompletionChunkDelta {
+    /// The role of the author of this message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    role: Option<Role>,
+    /// The contents of the chunk message.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    content: Option<String>,
+    // Not supported yet:
+    // tool_calls
+}
+
+#[allow(dead_code)]
+#[derive(Serialize, Debug)]
+#[serde(rename_all = "snake_case")]
+enum Role {
+    System,
+    User,
+    Assistant,
+    Tool,
 }
 
 fn default_frequency_penalty() -> f32 {
