@@ -23,15 +23,12 @@ use crate::triton::request::{Builder, InferTensorData};
 use crate::triton::ModelInferRequest;
 use crate::utils::deserialize_bytes_tensor;
 
-#[instrument(name = "chat_completions", skip(client))]
+#[instrument(name = "chat_completions", skip(client, request))]
 pub(crate) async fn compat_chat_completions(
     client: State<GrpcInferenceServiceClient<Channel>>,
     request: Json<ChatCompletionCreateParams>,
 ) -> Response {
-    tracing::debug!(
-        "Received request with streaming set to: {}",
-        &request.stream
-    );
+    tracing::debug!("Request: {:?}", request);
 
     if request.stream {
         chat_completions_stream(client, request)

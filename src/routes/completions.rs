@@ -23,15 +23,12 @@ use crate::triton::request::{Builder, InferTensorData};
 use crate::triton::ModelInferRequest;
 use crate::utils::{deserialize_bytes_tensor, string_or_seq_string};
 
-#[instrument(name = "completions", skip(client))]
+#[instrument(name = "completions", skip(client, request))]
 pub(crate) async fn compat_completions(
     client: State<GrpcInferenceServiceClient<Channel>>,
     request: Json<CompletionCreateParams>,
 ) -> Response {
-    tracing::debug!(
-        "Received request with streaming set to: {}",
-        &request.stream
-    );
+    tracing::debug!("request: {:?}", request);
 
     if request.stream {
         completions_stream(client, request).await.into_response()
