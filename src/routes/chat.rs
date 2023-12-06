@@ -86,7 +86,7 @@ async fn chat_completions_stream(
                 .context("empty raw output contents")?;
             let content = deserialize_bytes_tensor(raw_content.clone())?
                 .into_iter()
-                .map(|s| s.trim().replace("</s>", ""))
+                .map(|s| s.replace("</s>", ""))
                 .collect::<String>();
 
             if !content.is_empty() {
@@ -170,7 +170,7 @@ async fn chat_completions(
             .context("empty raw output contents")?;
         let content = deserialize_bytes_tensor(raw_content.clone())?
             .into_iter()
-            .map(|s| s.trim().replace("</s>", ""))
+            .map(|s| s.replace("</s>", ""))
             .collect();
         contents.push(content);
     }
@@ -195,6 +195,7 @@ async fn chat_completions(
 
 fn build_triton_request(request: ChatCompletionCreateParams) -> anyhow::Result<ModelInferRequest> {
     let chat_history = build_chat_history(request.messages);
+    tracing::debug!("chat history after formatting: {}", chat_history);
     Builder::new()
         .model_name(request.model)
         .input(

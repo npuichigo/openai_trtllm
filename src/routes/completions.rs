@@ -84,7 +84,7 @@ async fn completions_stream(
                 .context("empty raw output contents")?;
             let content = deserialize_bytes_tensor(raw_content.clone())?
                 .into_iter()
-                .map(|s| s.trim().replace("</s>", ""))
+                .map(|s| s.replace("</s>", ""))
                 .collect::<String>();
 
             if !content.is_empty() {
