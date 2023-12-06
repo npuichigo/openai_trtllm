@@ -9,6 +9,7 @@ response = openai.Completion.create(
     model="ensemble",
     prompt="This is a story of a hero who went",
     stream=True,
+    max_tokens=50,
 )
 for event in response:
     event_text = event["choices"][0]["text"]  # extract the text
