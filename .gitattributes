@@ -1,0 +1,2 @@
+models/download filter=lfs diff=lfs merge=lfs -text
+models/baichuan filter=lfs diff=lfs merge=lfs -text

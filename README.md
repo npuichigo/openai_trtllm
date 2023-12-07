@@ -5,11 +5,23 @@ with an OpenAI-compatible API. This allows you to integrate with [langchain](htt
 
 ## Get started
 Follow the [tensorrtllm_backend tutorial](https://github.com/triton-inference-server/tensorrtllm_backend#using-the-tensorrt-llm-backend)
-to build your TensorRT engine, and launch a triton server.
+to build your TensorRT engine, and launch a triton server. We provide an `Baichuan` example below to follow.
 
-Build with Cargo
+You need to clone the repository with dependencies to build the project.
 ```bash
+# Make sure you have git-lfs installed (https://git-lfs.com)
+git lfs install
 git submodule update --init --recursive
+```
+
+### Build with Docker
+Make sure you have [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/)
+installed.
+```bash
+docker compose up --build
+```
+### Build locally
+```bash
 cargo run --release
 ```
 
@@ -26,6 +38,50 @@ Options:
   -h, --help                               Print help
 ```
 
+## Example
+We provide a model template in `models/Baichuan` to let you follow. Since we're unknown of your hardware, we don't
+provide a pre-built TensorRT engine. You need to follow the steps below to build your own engine.
+
+1. Download the [Baichuan](https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat) model from HuggingFace.
+   ```bash
+   # Make sure you have git-lfs installed (https://git-lfs.com)
+   git lfs install
+   git clone https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat models/download/Baichuan2-13B-Chat
+   ```
+2. We provide a pre-built docker which is slightly newer than [v0.6.1](https://github.com/NVIDIA/TensorRT-LLM/tree/v0.6.1).
+You are free to test on other versions.
+   ```bash
+   docker run --rm -it --shm-size=2g --ulimit memlock=-1 --ulimit stack=67108864 --gpus=all -v /models:/models npuichigo/tritonserver-trtllm:711a28d bash
+   ```
+3. Follow the [tutorial](https://github.com/NVIDIA/TensorRT-LLM/tree/v0.6.1/examples/baichuan) here to build your engine.
+   ```bash
+   # int8 for example [with inflight batching]
+   python /app/tensorrt_llm/examples/baichuan/build.py \
+     --model_version v2_13b \
+     --model_dir /models/download/Baichuan2-13B-Chat \
+     --output_dir /models/baichuan/tensorrt_llm/1 \
+     --max_input_len 4096 \
+     --max_output_len 1024 \
+     --dtype float16 \
+     --use_gpt_attention_plugin float16 \
+     --use_gemm_plugin float16 \
+     --enable_context_fmha \
+     --use_weight_only \
+     --use_inflight_batching
+   ```
+   After the build, the engine will be saved to `/models/baichuan/tensorrt_llm/1/` to be used by Triton.
+4. Make sure the `models/baichuan/preprocessing/config.pbtxt` and `models/baichuan/postprocessing/config.pbtxt` refer
+to the correct tokenizer directory. For example:
+   ```bash
+   parameters {
+     key: "tokenizer_dir"
+     value: {
+       string_value: "/models/download/Baichuan2-13B-Chat"
+     }
+   }
+   ```
+5. Go ahead to launch the server, better with docker-compose.
+ 
 ## Tracing
 We are tracing performance metrics using tracing, tracing-opentelemetry and opentelemetry-otlp crates.
 
