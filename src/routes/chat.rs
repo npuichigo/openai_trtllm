@@ -193,7 +193,8 @@ async fn chat_completions(
 fn build_triton_request(request: ChatCompletionCreateParams) -> anyhow::Result<ModelInferRequest> {
     let chat_history = build_chat_history(request.messages);
     tracing::debug!("chat history after formatting: {}", chat_history);
-    Builder::new()
+
+    let mut builder = Builder::new()
         .model_name(request.model)
         .input(
             "text_input",
@@ -213,15 +214,46 @@ fn build_triton_request(request: ChatCompletionCreateParams) -> anyhow::Result<M
         .input(
             "stop_words",
             [1, 1],
-            InferTensorData::Bytes(vec!["</s>".as_bytes().to_vec()]),
+            InferTensorData::Bytes(
+                request
+                    .stop
+                    .unwrap_or_else(|| vec!["</s>".to_string()])
+                    .into_iter()
+                    .map(|s| s.into_bytes())
+                    .collect(),
+            ),
+        )
+        .input("top_p", [1, 1], InferTensorData::FP32(vec![request.top_p]))
+        .input(
+            "temperature",
+            [1, 1],
+            InferTensorData::FP32(vec![request.temperature]),
+        )
+        .input(
+            "presence_penalty",
+            [1, 1],
+            InferTensorData::FP32(vec![request.presence_penalty]),
+        )
+        .input(
+            "beam_width",
+            [1, 1],
+            InferTensorData::Int32(vec![request.n as i32]),
         )
         .input(
             "stream",
             [1, 1],
             InferTensorData::Bool(vec![request.stream]),
-        )
-        .build()
-        .context("failed to build triton request")
+        );
+
+    if request.seed.is_some() {
+        builder = builder.input(
+            "random_seed",
+            [1, 1],
+            InferTensorData::UInt64(vec![request.seed.unwrap() as u64]),
+        );
+    }
+
+    builder.build().context("failed to build triton request")
 }
 
 fn build_chat_history(messages: Vec<ChatCompletionMessageParams>) -> String {
