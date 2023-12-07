@@ -12,6 +12,9 @@ You need to clone the repository with dependencies to build the project.
 # Make sure you have git-lfs installed (https://git-lfs.com)
 git lfs install
 git submodule update --init --recursive
+
+# If lfs files are not downloaded, run the following command
+git lfs pull
 ```
 
 ### Build with Docker
