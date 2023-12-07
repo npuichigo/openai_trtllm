@@ -3,13 +3,15 @@
 Provide [TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM) and [NVIDIA Triton Inference Server](https://github.com/triton-inference-server/tensorrtllm_backend)
 with an OpenAI-compatible API. This allows you to integrate with [langchain](https://github.com/langchain-ai/langchain)
 
+![demo](images/demo.gif)
+
 ## Get started
 Follow the [tensorrtllm_backend tutorial](https://github.com/triton-inference-server/tensorrtllm_backend#using-the-tensorrt-llm-backend)
 to build your TensorRT engine, and launch a triton server. We provide an `Baichuan` example below to follow.
 
 You need to clone the repository with dependencies to build the project.
 ```bash
-git submodule update --init --recursive
+git clone --recursive https://github.com/npuichigo/openai_trtllm.git
 ```
 
 ### Build with Docker
