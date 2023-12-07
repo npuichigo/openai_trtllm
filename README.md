@@ -9,8 +9,6 @@ to build your TensorRT engine, and launch a triton server. We provide an `Baichu
 
 You need to clone the repository with dependencies to build the project.
 ```bash
-# Make sure you have git-lfs installed (https://git-lfs.com)
-git lfs install
 git submodule update --init --recursive
 ```
 
