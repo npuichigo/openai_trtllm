@@ -1,0 +1,46 @@
+version: "3"
+
+services:
+  openai_trtllm:
+    image: openai_trtllm
+    build:
+      context: .
+      dockerfile: Dockerfile
+    command:
+      - "--host"
+      - "0.0.0.0"
+      - "--port"
+      - "3000"
+      - "--triton-endpoint"
+      - "http://tensorrtllm_backend:8001"
+    ports:
+      - "3000:3000"
+    restart: on-failure
+
+  # Triton backend for TensorRT LLM
+  tensorrtllm_backend:
+    image: npuichigo/tritonserver:711a28d
+    command:
+      - "python"
+      - "/scripts/launch_triton_server.py"
+      - "--model_repo=/models/baichuan"
+    volumes:
+      - ./scripts:/scripts
+      - ./models:/models
+    ports:
+      - "8000:8000"
+      - "8001:8001"
+      - "8002:8002"
+    deploy:
+      replicas: 1
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [ gpu ]
+    shm_size: '2g'
+    ulimits:
+      memlock: -1
+      stack: 67108864
+    restart: on-failure
