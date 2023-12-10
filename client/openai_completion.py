@@ -1,11 +1,10 @@
 import pprint
 
-import openai
+from openai import OpenAI
 
-openai.api_key = "test"
-openai.api_base = "http://localhost:3000/v1"
+client = OpenAI(base_url="http://localhost:3000/v1", api_key="test")
 
-result = openai.Completion.create(
+result = client.completions.create(
     model="ensemble",
     prompt="Say this is a test",
 )

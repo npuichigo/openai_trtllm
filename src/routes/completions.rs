@@ -28,7 +28,7 @@ pub(crate) async fn compat_completions(
     client: State<GrpcInferenceServiceClient<Channel>>,
     request: Json<CompletionCreateParams>,
 ) -> Response {
-    tracing::debug!("request: {:?}", request);
+    tracing::info!("request: {:?}", request);
 
     if request.stream {
         completions_stream(client, request).await.into_response()
@@ -75,11 +75,8 @@ async fn completions_stream(
                 .context("empty infer response received")?;
             tracing::debug!("triton infer response: {:?}", infer_response);
 
-            let raw_content = infer_response
-                .raw_output_contents
-                .last()
-                .context("empty raw output contents")?;
-            let content = deserialize_bytes_tensor(raw_content.clone())?
+            let raw_content = infer_response.raw_output_contents[0].clone();
+            let content = deserialize_bytes_tensor(raw_content)?
                 .into_iter()
                 .map(|s| s.replace("</s>", ""))
                 .collect::<String>();
@@ -151,11 +148,8 @@ async fn completions(
             .context("empty infer response received")?;
         tracing::debug!("triton infer response: {:?}", infer_response);
 
-        let raw_content = infer_response
-            .raw_output_contents
-            .last()
-            .context("empty raw output contents")?;
-        let content = deserialize_bytes_tensor(raw_content.clone())?
+        let raw_content = infer_response.raw_output_contents[0].clone();
+        let content = deserialize_bytes_tensor(raw_content)?
             .into_iter()
             .map(|s| s.trim().replace("</s>", ""))
             .collect();
@@ -173,7 +167,13 @@ async fn completions(
             logprobs: None,
             finish_reason: Some(FinishReason::Stop),
         }],
-        usage: None,
+        // Not supported yet, need triton to return usage stats
+        // but add a fake one to make LangChain happy
+        usage: Some(Usage {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0,
+        }),
     }))
 }
 
@@ -233,7 +233,8 @@ fn build_triton_request(request: CompletionCreateParams) -> anyhow::Result<Model
             "stream",
             [1, 1],
             InferTensorData::Bool(vec![request.stream]),
-        );
+        )
+        .output("text_output");
 
     if request.seed.is_some() {
         builder = builder.input(
