@@ -1,7 +1,7 @@
 #![allow(dead_code)]
 
 use super::{InferTensorContents, ModelInferRequest};
-use crate::triton::model_infer_request::InferInputTensor;
+use crate::triton::model_infer_request::{InferInputTensor, InferRequestedOutputTensor};
 
 pub(crate) struct Builder {
     inner: anyhow::Result<ModelInferRequest>,
@@ -57,6 +57,19 @@ impl Builder {
                 shape: shape.into(),
                 datatype: data.as_ref().into(),
                 contents: Some(data.into()),
+                ..Default::default()
+            });
+            Ok(request)
+        })
+    }
+
+    pub(crate) fn output<S>(self, name: S) -> Self
+    where
+        S: Into<String>,
+    {
+        self.and_then(|mut request| {
+            request.outputs.push(InferRequestedOutputTensor {
+                name: name.into(),
                 ..Default::default()
             });
             Ok(request)

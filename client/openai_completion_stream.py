@@ -1,17 +1,18 @@
 from sys import stdout
 
-import openai
+from openai import OpenAI
 
-openai.api_key = "test"
-openai.api_base = "http://localhost:3000/v1"
+client = OpenAI(base_url="http://localhost:3000/v1", api_key="test")
 
-response = openai.Completion.create(
+response = client.completions.create(
     model="ensemble",
     prompt="This is a story of a hero who went",
     stream=True,
     max_tokens=50,
 )
 for event in response:
-    event_text = event["choices"][0]["text"]  # extract the text
+    if not isinstance(event, dict):
+        event = event.model_dump()
+    event_text = event["choices"][0]["text"]
     stdout.write(event_text)
     stdout.flush()
