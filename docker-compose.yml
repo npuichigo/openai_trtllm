@@ -23,11 +23,11 @@ services:
   tensorrtllm_backend:
     image: npuichigo/tritonserver:711a28d
     command:
-      - "python"
-      - "/scripts/launch_triton_server.py"
-      - "--model_repo=/models/baichuan"
+      - "tritonserver"
+      - "--model-repository=/models/baichuan"
+      - "--disable-auto-complete-config"
+      - "--backend-config=python,shm-region-prefix-name=prefix0_:"
     volumes:
-      - ./scripts:/scripts
       - ./models:/models
     ports:
       - "8000:8000"
