@@ -106,7 +106,7 @@ docker run --rm --name jaeger \
 To enable tracing, set the `OTLP_ENDPOINT` environment variable or `--otlp-endpoint` command line
 argument to the endpoint of your OpenTelemetry collector.
 ```bash
-OTLP_ENDPOINT=http://localhost:4317 cargo run --release
+OPENAI_TRTLLM_OTLP_ENDPOINT=http://localhost:4317 cargo run --release
 ```
 
 ## References
