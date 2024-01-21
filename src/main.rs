@@ -14,12 +14,7 @@ async fn main() -> anyhow::Result<()> {
         .extract()
         .unwrap();
 
-    telemetry::init_subscriber(
-        "openai_trtllm",
-        "info",
-        std::io::stdout,
-        config.otlp_endpoint.clone(),
-    );
+    telemetry::init_subscriber("openai_trtllm", "info", config.otlp_endpoint.clone())?;
 
     startup::run_server(config).await
 }

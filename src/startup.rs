@@ -1,24 +1,14 @@
 use anyhow::Context;
 use axum::routing::{get, post};
 use axum::Router;
-use axum_prometheus::PrometheusMetricLayer;
 use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
-use tower::ServiceBuilder;
-use tower_http::request_id::MakeRequestUuid;
-use tower_http::{
-    trace::TraceLayer,
-    trace::{DefaultMakeSpan, DefaultOnResponse},
-    ServiceBuilderExt,
-};
-use tracing::Level;
 
 use crate::config::Config;
 use crate::routes;
 use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
 
 pub async fn run_server(config: Config) -> anyhow::Result<()> {
-    let (prometheus_layer, metric_handle) = PrometheusMetricLayer::pair();
-
+    tracing::info!("Connecting to triton endpoint: {}", config.triton_endpoint);
     let grpc_client = GrpcInferenceServiceClient::connect(config.triton_endpoint)
         .await
         .context("failed to connect triton endpoint")?;
@@ -30,35 +20,15 @@ pub async fn run_server(config: Config) -> anyhow::Result<()> {
             post(routes::compat_chat_completions),
         )
         .with_state(grpc_client)
-        .layer(prometheus_layer)
         .layer(OtelInResponseLayer)
         .layer(OtelAxumLayer::default())
-        .layer(
-            ServiceBuilder::new()
-                .set_x_request_id(MakeRequestUuid)
-                .layer(
-                    TraceLayer::new_for_http()
-                        .make_span_with(
-                            DefaultMakeSpan::new()
-                                .include_headers(true)
-                                .level(Level::DEBUG),
-                        )
-                        .on_response(
-                            DefaultOnResponse::new()
-                                .include_headers(true)
-                                .level(Level::DEBUG),
-                        ),
-                )
-                .propagate_x_request_id(),
-        )
-        .route("/health_check", get(routes::health_check))
-        .route("/metrics", get(|| async move { metric_handle.render() }));
+        .route("/health_check", get(routes::health_check));
 
     let address = format!("{}:{}", config.host, config.port);
     tracing::info!("Starting server at {}", address);
 
-    axum::Server::bind(&address.parse()?)
-        .serve(app.into_make_service())
+    let listener = tokio::net::TcpListener::bind(address).await.unwrap();
+    axum::serve(listener, app)
         .with_graceful_shutdown(shutdown_signal())
         .await?;
 

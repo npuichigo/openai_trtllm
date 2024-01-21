@@ -1,15 +1,14 @@
 use opentelemetry::trace::TraceError;
+use opentelemetry::{global, KeyValue};
 use opentelemetry_otlp::WithExportConfig;
+use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace as sdktrace;
 use opentelemetry_sdk::{runtime, Resource};
-use tracing::subscriber::set_global_default;
-use tracing_bunyan_formatter::{BunyanFormattingLayer, JsonStorageLayer};
-use tracing_log::LogTracer;
-use tracing_subscriber::fmt::MakeWriter;
-use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Registry};
+use tracing_subscriber::fmt::format::FmtSpan;
+use tracing_subscriber::util::SubscriberInitExt;
+use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer};
 
-fn init_tracer(otlp_endpoint: String) -> Result<sdktrace::Tracer, TraceError> {
-    opentelemetry::global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
+fn init_tracer(name: &str, otlp_endpoint: &str) -> Result<sdktrace::Tracer, TraceError> {
     opentelemetry_otlp::new_pipeline()
         .tracing()
         .with_exporter(
@@ -17,9 +16,14 @@ fn init_tracer(otlp_endpoint: String) -> Result<sdktrace::Tracer, TraceError> {
                 .tonic()
                 .with_endpoint(otlp_endpoint),
         )
-        .with_trace_config(sdktrace::config().with_resource(Resource::new(vec![
-            opentelemetry::KeyValue::new("service.name", "openai_trtllm"),
-        ])))
+        .with_trace_config(
+            sdktrace::config()
+                .with_resource(Resource::new(vec![KeyValue::new(
+                    "service.name",
+                    name.to_owned(),
+                )]))
+                .with_sampler(sdktrace::Sampler::AlwaysOn),
+        )
         .install_batch(runtime::Tokio)
 }
 
@@ -29,30 +33,48 @@ fn init_tracer(otlp_endpoint: String) -> Result<sdktrace::Tracer, TraceError> {
 ///
 /// We are using `impl Subscriber` as return type to avoid having to spell out the actual
 /// type of the returned subscriber, which is indeed quite complex.
-pub fn init_subscriber<Sink>(
+pub fn init_subscriber(
     name: &str,
     env_filter: &str,
-    sink: Sink,
     otlp_endpoint: Option<String>,
-) where
-    Sink: for<'a> MakeWriter<'a> + Send + Sync + 'static,
-{
-    LogTracer::init().expect("Failed to set logger");
+) -> anyhow::Result<()> {
+    global::set_text_map_propagator(TraceContextPropagator::new());
 
-    let env_filter =
-        EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(env_filter));
-    let formatting_layer = BunyanFormattingLayer::new(name.into(), sink);
+    let env_filter = EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| EnvFilter::new(env_filter))
+        .add_directive("otel::tracing=trace".parse()?)
+        .add_directive("otel=debug".parse()?);
 
-    let registry = Registry::default()
-        .with(env_filter)
-        .with(JsonStorageLayer)
-        .with(formatting_layer);
+    let telemetry_layer = if let Some(otlp_endpoint) = otlp_endpoint {
+        let tracer = init_tracer(name, &otlp_endpoint)?;
 
-    if let Some(otlp_endpoint) = otlp_endpoint {
-        let tracer = init_tracer(otlp_endpoint).expect("unable to initialize tracer");
-        let tracer_layer = tracing_opentelemetry::layer().with_tracer(tracer);
-        set_global_default(registry.with(tracer_layer)).expect("Failed to set subscriber");
+        Some(
+            tracing_opentelemetry::layer()
+                .with_error_records_to_exceptions(true)
+                .with_tracer(tracer),
+        )
     } else {
-        set_global_default(registry).expect("Failed to set subscriber");
-    }
+        None
+    };
+
+    let fmt_layer = if cfg!(debug_assertions) {
+        tracing_subscriber::fmt::layer()
+            .with_line_number(true)
+            .with_thread_names(true)
+            .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
+            .boxed()
+    } else {
+        tracing_subscriber::fmt::layer()
+            .json()
+            .flatten_event(true)
+            .boxed()
+    };
+
+    tracing_subscriber::registry()
+        .with(env_filter)
+        .with(telemetry_layer)
+        .with(fmt_layer)
+        .init();
+
+    Ok(())
 }

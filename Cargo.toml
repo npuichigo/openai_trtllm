@@ -4,10 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-axum = "0.6.20"
-hyper = "0.14.27"
-tower = "0.4.13"
-tower-http = { version = "0.4.4", features = ["trace", "request-id", "util"] }
+axum = { version = "0.7" }
 tokio = { version = "1.33.0", features = ["full"] }
 async-stream = "0.3.5"
 tonic = "0.10.2"
@@ -17,20 +14,18 @@ anyhow = { version = "1.0.75", features = ["backtrace"] }
 clap = { version = "4.4.7", features = ["derive"] }
 figment = { version = "0.10.12", features = ["env"] }
 serde = { version = "1.0.190", features = ["derive"] }
-tracing = "0.1.40"
-tracing-subscriber = { version = "0.3.17", features = ["env-filter", "json", "time"] }
-tracing-log = "0.2.0"
-tracing-bunyan-formatter = "0.3.9"
-tracing-opentelemetry = "0.22.0"
-opentelemetry = { version = "0.21.0", features = ["metrics"] }
-opentelemetry_sdk = { version = "0.21.0", features = ["rt-tokio", "metrics"] }
-opentelemetry-otlp = "0.14.0"
-opentelemetry-jaeger = "0.20.0"
-axum-tracing-opentelemetry = "0.14.1"
-axum-prometheus = "0.4.0"
+serde_json = "1.0.108"
 bytes = "1.5.0"
 uuid = { version = "1.6.1", features = ["v4"] }
-serde_json = "1.0.108"
+tracing = { version = "0.1", features = ["log"] }
+tracing-subscriber = { version = "0.3", features = ["registry", "env-filter", "json"] }
+tracing-opentelemetry = { version = "0.22" }
+tower-http = { version = "0.5", features = ["trace"] }
+opentelemetry = { version = "0.21.0", features = ["metrics", "logs"] }
+opentelemetry_sdk = { version = "0.21.1", features = ["rt-tokio", "logs"] }
+opentelemetry-otlp = { version = "0.14.0", features = ["tonic", "metrics", "logs"]  }
+opentelemetry-semantic-conventions = { version = "0.13.0" }
+axum-tracing-opentelemetry = "0.16.0"
 
 [build-dependencies]
 anyhow = "1.0.75"
