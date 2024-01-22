@@ -4,7 +4,6 @@ use opentelemetry_otlp::WithExportConfig;
 use opentelemetry_sdk::propagation::TraceContextPropagator;
 use opentelemetry_sdk::trace as sdktrace;
 use opentelemetry_sdk::{runtime, Resource};
-use tracing_subscriber::fmt::format::FmtSpan;
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{layer::SubscriberExt, EnvFilter, Layer};
 
@@ -59,9 +58,9 @@ pub fn init_subscriber(
 
     let fmt_layer = if cfg!(debug_assertions) {
         tracing_subscriber::fmt::layer()
+            .pretty()
             .with_line_number(true)
             .with_thread_names(true)
-            .with_span_events(FmtSpan::NEW | FmtSpan::CLOSE)
             .boxed()
     } else {
         tracing_subscriber::fmt::layer()
