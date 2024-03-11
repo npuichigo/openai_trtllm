@@ -78,10 +78,7 @@ async fn chat_completions_stream(
             tracing::debug!("triton infer response: {:?}", infer_response);
 
             let raw_content = infer_response.raw_output_contents[0].clone();
-            let content = deserialize_bytes_tensor(raw_content)?
-                .into_iter()
-                .map(|s| s.replace("</s>", ""))
-                .collect::<String>();
+            let content = deserialize_bytes_tensor(raw_content)?.into_iter().collect::<String>();
 
             if !content.is_empty() {
                 let response = ChatCompletionChunk {
@@ -159,10 +156,7 @@ async fn chat_completions(
         tracing::debug!("triton infer response: {:?}", infer_response);
 
         let raw_content = infer_response.raw_output_contents[0].clone();
-        let content = deserialize_bytes_tensor(raw_content)?
-            .into_iter()
-            .map(|s| s.replace("</s>", ""))
-            .collect();
+        let content = deserialize_bytes_tensor(raw_content)?.into_iter().collect();
         contents.push(content);
     }
 
