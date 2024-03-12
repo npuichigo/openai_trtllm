@@ -1,32 +1,42 @@
 # openai_trtllm - OpenAI-compatible API for TensorRT-LLM
 
-Provide [TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM) and [NVIDIA Triton Inference Server](https://github.com/triton-inference-server/tensorrtllm_backend)
+Provide [TensorRT-LLM](https://github.com/NVIDIA/TensorRT-LLM)
+and [NVIDIA Triton Inference Server](https://github.com/triton-inference-server/tensorrtllm_backend)
 with an OpenAI-compatible API. This allows you to integrate with [langchain](https://github.com/langchain-ai/langchain)
 
 ## Quick overview
+
 ![demo](images/demo.gif)
 
 ## Get started
-Follow the [tensorrtllm_backend tutorial](https://github.com/triton-inference-server/tensorrtllm_backend#using-the-tensorrt-llm-backend)
+
+Follow
+the [tensorrtllm_backend tutorial](https://github.com/triton-inference-server/tensorrtllm_backend#using-the-tensorrt-llm-backend)
 to build your TensorRT engine, and launch a triton server. We provide an `Baichuan` example below to follow.
 
 You need to clone the repository with dependencies to build the project.
+
 ```bash
 git clone --recursive https://github.com/npuichigo/openai_trtllm.git
 ```
 
 ### Build with Docker
+
 Make sure you have [Docker](https://docs.docker.com/get-docker/) and [Docker Compose](https://docs.docker.com/compose/)
 installed.
+
 ```bash
 docker compose up --build
 ```
+
 ### Build locally
+
 ```bash
 cargo run --release
 ```
 
 The parameters can be set with environment variables or command line arguments:
+
 ```bash
 ./target/release/openai_trtllm --help
 Usage: openai_trtllm [OPTIONS]
@@ -40,6 +50,7 @@ Options:
 ```
 
 ## Example
+
 We provide a model template in `models/Baichuan` to let you follow. Since we're unknown of your hardware, we don't
 provide a pre-built TensorRT engine. You need to follow the steps below to build your own engine.
 
@@ -49,12 +60,14 @@ provide a pre-built TensorRT engine. You need to follow the steps below to build
    git lfs install
    git clone https://huggingface.co/baichuan-inc/Baichuan2-13B-Chat models/download/Baichuan2-13B-Chat
    ```
-2. We provide a pre-built docker which is slightly newer than [v0.6.1](https://github.com/NVIDIA/TensorRT-LLM/tree/v0.6.1).
-You are free to test on other versions.
+2. We provide a pre-built docker which is slightly newer
+   than [v0.6.1](https://github.com/NVIDIA/TensorRT-LLM/tree/v0.6.1).
+   You are free to test on other versions.
    ```bash
    docker run --rm -it --shm-size=2g --ulimit memlock=-1 --ulimit stack=67108864 --gpus=all -v /models:/models npuichigo/tritonserver-trtllm:711a28d bash
    ```
-3. Follow the [tutorial](https://github.com/NVIDIA/TensorRT-LLM/tree/v0.6.1/examples/baichuan) here to build your engine.
+3. Follow the [tutorial](https://github.com/NVIDIA/TensorRT-LLM/tree/v0.6.1/examples/baichuan) here to build your
+   engine.
    ```bash
    # int8 for example [with inflight batching]
    python /app/tensorrt_llm/examples/baichuan/build.py \
@@ -72,7 +85,7 @@ You are free to test on other versions.
    ```
    After the build, the engine will be saved to `/models/baichuan/tensorrt_llm/1/` to be used by Triton.
 4. Make sure the `models/baichuan/preprocessing/config.pbtxt` and `models/baichuan/postprocessing/config.pbtxt` refer
-to the correct tokenizer directory. For example:
+   to the correct tokenizer directory. For example:
    ```bash
    parameters {
      key: "tokenizer_dir"
@@ -82,11 +95,16 @@ to the correct tokenizer directory. For example:
    }
    ```
 5. Go ahead to launch the server, better with docker-compose.
- 
+
 ## Tracing
+
 We are tracing performance metrics using tracing, tracing-opentelemetry and opentelemetry-otlp crates.
 
+Here is an example of tracing with Tempo on a k8s cluster:
+<img src="images/trace.png" width=600>
+
 Let's say you are running a Jaeger instance locally, you can run the following command to start it:
+
 ```bash
 docker run --rm --name jaeger \
   -p 6831:6831/udp \
@@ -105,9 +123,11 @@ docker run --rm --name jaeger \
 
 To enable tracing, set the `OTLP_ENDPOINT` environment variable or `--otlp-endpoint` command line
 argument to the endpoint of your OpenTelemetry collector.
+
 ```bash
 OPENAI_TRTLLM_OTLP_ENDPOINT=http://localhost:4317 cargo run --release
 ```
 
 ## References
+
 - [cria](https://github.com/AmineDiro/cria)

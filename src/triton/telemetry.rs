@@ -1,6 +1,6 @@
 use axum::http::HeaderMap;
+use opentelemetry::global;
 use opentelemetry::propagation::Injector;
-use opentelemetry::{global, Context};
 use tonic::Request;
 use tracing::Span;
 use tracing_opentelemetry::OpenTelemetrySpanExt;
