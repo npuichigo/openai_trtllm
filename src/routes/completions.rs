@@ -6,6 +6,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use anyhow::Context;
 use async_stream::{stream, try_stream};
 use axum::extract::State;
+use axum::http::HeaderMap;
 use axum::response::sse::{Event, KeepAlive, Sse};
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -20,25 +21,30 @@ use uuid::Uuid;
 use crate::error::AppError;
 use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
 use crate::triton::request::{Builder, InferTensorData};
+use crate::triton::telemetry::propagate_context;
 use crate::triton::ModelInferRequest;
 use crate::utils::{deserialize_bytes_tensor, string_or_seq_string};
 
 #[instrument(name = "completions", skip(client, request))]
 pub(crate) async fn compat_completions(
+    headers: HeaderMap,
     client: State<GrpcInferenceServiceClient<Channel>>,
     request: Json<CompletionCreateParams>,
 ) -> Response {
     tracing::info!("request: {:?}", request);
 
     if request.stream {
-        completions_stream(client, request).await.into_response()
+        completions_stream(headers, client, request)
+            .await
+            .into_response()
     } else {
-        completions(client, request).await.into_response()
+        completions(headers, client, request).await.into_response()
     }
 }
 
 #[instrument(name = "streaming completions", skip(client, request))]
 async fn completions_stream(
+    headers: HeaderMap,
     State(mut client): State<GrpcInferenceServiceClient<Channel>>,
     Json(request): Json<CompletionCreateParams>,
 ) -> Result<Sse<impl Stream<Item = anyhow::Result<Event>>>, AppError> {
@@ -49,10 +55,13 @@ async fn completions_stream(
     let request = build_triton_request(request)?;
 
     let response_stream = try_stream! {
-        let request_stream = stream! { yield request };
+        let request = stream! { yield request };
+        let mut request = tonic::Request::new(request);
+
+        propagate_context(&mut request, &headers);
 
         let mut stream = client
-            .model_stream_infer(tonic::Request::new(request_stream))
+            .model_stream_infer(request)
             .await
             .context("failed to call triton grpc method model_stream_infer")?
             .into_inner();
@@ -121,14 +130,19 @@ async fn completions_stream(
 
 #[instrument(name = "non-streaming completions", skip(client, request), err(Debug))]
 async fn completions(
+    headers: HeaderMap,
     State(mut client): State<GrpcInferenceServiceClient<Channel>>,
     Json(request): Json<CompletionCreateParams>,
 ) -> Result<Json<Completion>, AppError> {
     let model_name = request.model.clone();
     let request = build_triton_request(request)?;
-    let request_stream = stream! { yield request };
+    let request = stream! { yield request };
+    let mut request = tonic::Request::new(request);
+
+    propagate_context(&mut request, &headers);
+
     let mut stream = client
-        .model_stream_infer(tonic::Request::new(request_stream))
+        .model_stream_infer(request)
         .await
         .context("failed to call triton grpc method model_stream_infer")?
         .into_inner();
