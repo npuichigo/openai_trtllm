@@ -1,7 +1,7 @@
 use anyhow::Context;
 use axum::routing::{get, post};
 use axum::Router;
-use axum_tracing_opentelemetry::middleware::{OtelAxumLayer, OtelInResponseLayer};
+use axum_tracing_opentelemetry::middleware::OtelAxumLayer;
 
 use crate::config::Config;
 use crate::routes;
@@ -20,7 +20,6 @@ pub async fn run_server(config: Config) -> anyhow::Result<()> {
             post(routes::compat_chat_completions),
         )
         .with_state(grpc_client)
-        .layer(OtelInResponseLayer)
         .layer(OtelAxumLayer::default())
         .route("/health_check", get(routes::health_check));
 
