@@ -26,5 +26,5 @@ pub struct Config {
     /// File containing the history template string
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
-    pub history_template_file: Option<String>
+    pub history_template_file: Option<String>,
 }

@@ -1,6 +1,8 @@
 {% for item in items -%}
 {%- capture identity -%}
     {%- case item.identity -%}
+        {%- when "System", "Tool" -%}
+            System
         {%- when "User" -%}
             <reserved_106>
         {%- when "Assistant" -%}

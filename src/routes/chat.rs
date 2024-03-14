@@ -30,7 +30,10 @@ use crate::utils::deserialize_bytes_tensor;
 #[instrument(name = "chat_completions", skip(grpc_client, history_builder, request))]
 pub(crate) async fn compat_chat_completions(
     headers: HeaderMap,
-    State(AppState{ grpc_client, history_builder }): State<AppState>,
+    State(AppState {
+        grpc_client,
+        history_builder,
+    }): State<AppState>,
     request: Json<ChatCompletionCreateParams>,
 ) -> Response {
     tracing::info!("request: {:?}", request);
@@ -46,7 +49,10 @@ pub(crate) async fn compat_chat_completions(
     }
 }
 
-#[instrument(name = "streaming chat completions", skip(client, history_builder, request))]
+#[instrument(
+    name = "streaming chat completions",
+    skip(client, history_builder, request)
+)]
 async fn chat_completions_stream(
     headers: HeaderMap,
     mut client: GrpcInferenceServiceClient<Channel>,
@@ -203,7 +209,10 @@ async fn chat_completions(
     }))
 }
 
-fn build_triton_request(request: ChatCompletionCreateParams, history_builder: &HistoryBuilder) -> anyhow::Result<ModelInferRequest> {
+fn build_triton_request(
+    request: ChatCompletionCreateParams,
+    history_builder: &HistoryBuilder,
+) -> anyhow::Result<ModelInferRequest> {
     let chat_history = history_builder.build_history(&request.messages)?;
     tracing::debug!("chat history after formatting: {}", chat_history);
 
