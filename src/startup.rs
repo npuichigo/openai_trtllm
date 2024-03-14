@@ -4,7 +4,9 @@ use axum::Router;
 use axum_tracing_opentelemetry::middleware::OtelAxumLayer;
 
 use crate::config::Config;
+use crate::history::HistoryBuilder;
 use crate::routes;
+use crate::state::AppState;
 use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
 
 pub async fn run_server(config: Config) -> anyhow::Result<()> {
@@ -13,13 +15,16 @@ pub async fn run_server(config: Config) -> anyhow::Result<()> {
         .await
         .context("failed to connect triton endpoint")?;
 
+    let history_builder = HistoryBuilder::new(&config.history_template, &config.history_template_file)?;
+    let state = AppState{grpc_client, history_builder};
+
     let app = Router::new()
         .route("/v1/completions", post(routes::compat_completions))
         .route(
             "/v1/chat/completions",
             post(routes::compat_chat_completions),
         )
-        .with_state(grpc_client)
+        .with_state(state)
         .layer(OtelAxumLayer::default())
         .route("/health_check", get(routes::health_check));
 

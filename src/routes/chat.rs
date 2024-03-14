@@ -19,42 +19,45 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::history::HistoryBuilder;
+use crate::state::AppState;
 use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
 use crate::triton::request::{Builder, InferTensorData};
 use crate::triton::telemetry::propagate_context;
 use crate::triton::ModelInferRequest;
 use crate::utils::deserialize_bytes_tensor;
 
-#[instrument(name = "chat_completions", skip(client, request))]
+#[instrument(name = "chat_completions", skip(grpc_client, history_builder, request))]
 pub(crate) async fn compat_chat_completions(
     headers: HeaderMap,
-    client: State<GrpcInferenceServiceClient<Channel>>,
+    State(AppState{ grpc_client, history_builder }): State<AppState>,
     request: Json<ChatCompletionCreateParams>,
 ) -> Response {
     tracing::info!("request: {:?}", request);
 
     if request.stream {
-        chat_completions_stream(headers, client, request)
+        chat_completions_stream(headers, grpc_client, history_builder, request)
             .await
             .into_response()
     } else {
-        chat_completions(headers, client, request)
+        chat_completions(headers, grpc_client, history_builder, request)
             .await
             .into_response()
     }
 }
 
-#[instrument(name = "streaming chat completions", skip(client, request))]
+#[instrument(name = "streaming chat completions", skip(client, history_builder, request))]
 async fn chat_completions_stream(
     headers: HeaderMap,
-    State(mut client): State<GrpcInferenceServiceClient<Channel>>,
+    mut client: GrpcInferenceServiceClient<Channel>,
+    history_builder: HistoryBuilder,
     Json(request): Json<ChatCompletionCreateParams>,
 ) -> Result<Sse<impl Stream<Item = anyhow::Result<Event>>>, AppError> {
     let id = format!("cmpl-{}", Uuid::new_v4());
     let created = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
 
     let model_name = request.model.clone();
-    let request = build_triton_request(request)?;
+    let request = build_triton_request(request, &history_builder)?;
 
     let response_stream = try_stream! {
         let request = stream! { yield request };
@@ -134,17 +137,18 @@ async fn chat_completions_stream(
 
 #[instrument(
     name = "non-streaming chat completions",
-    skip(client, request),
+    skip(client, history_builder, request),
     err(Debug)
 )]
 async fn chat_completions(
     headers: HeaderMap,
-    State(mut client): State<GrpcInferenceServiceClient<Channel>>,
+    mut client: GrpcInferenceServiceClient<Channel>,
+    history_builder: HistoryBuilder,
     Json(request): Json<ChatCompletionCreateParams>,
 ) -> Result<Json<ChatCompletion>, AppError> {
     let model_name = request.model.clone();
 
-    let request = build_triton_request(request)?;
+    let request = build_triton_request(request, &history_builder)?;
     let request = stream! { yield request };
     let mut request = tonic::Request::new(request);
 
@@ -199,8 +203,8 @@ async fn chat_completions(
     }))
 }
 
-fn build_triton_request(request: ChatCompletionCreateParams) -> anyhow::Result<ModelInferRequest> {
-    let chat_history = build_chat_history(request.messages);
+fn build_triton_request(request: ChatCompletionCreateParams, history_builder: &HistoryBuilder) -> anyhow::Result<ModelInferRequest> {
+    let chat_history = history_builder.build_history(&request.messages)?;
     tracing::debug!("chat history after formatting: {}", chat_history);
 
     let mut builder = Builder::new()
@@ -266,36 +270,6 @@ fn build_triton_request(request: ChatCompletionCreateParams) -> anyhow::Result<M
     builder.build().context("failed to build triton request")
 }
 
-fn build_chat_history(messages: Vec<ChatCompletionMessageParams>) -> String {
-    let mut history = String::new();
-    for message in messages {
-        match message {
-            ChatCompletionMessageParams::System { content, name } => {
-                if let Some(name) = name {
-                    history.push_str(&format!("System {}: {}\n", name, content))
-                } else {
-                    history.push_str(&format!("System: {}\n", content))
-                }
-            }
-            ChatCompletionMessageParams::User { content, name } => {
-                if let Some(name) = name {
-                    history.push_str(&format!("User {}: {}\n", name, content))
-                } else {
-                    history.push_str(&format!("User: {}\n", content))
-                }
-            }
-            ChatCompletionMessageParams::Assistant { content, .. } => {
-                history.push_str(&format!("Assistant: {}\n", content))
-            }
-            ChatCompletionMessageParams::Tool { content, .. } => {
-                history.push_str(&format!("Tool: {}\n", content))
-            }
-        }
-    }
-    history.push_str("ASSISTANT:");
-    history
-}
-
 #[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 pub(crate) struct ChatCompletionCreateParams {
@@ -353,7 +327,7 @@ pub(crate) struct ChatCompletionCreateParams {
 #[allow(dead_code)]
 #[derive(Deserialize, Debug)]
 #[serde(tag = "role", rename_all = "lowercase")]
-enum ChatCompletionMessageParams {
+pub enum ChatCompletionMessageParams {
     System {
         content: String,
         name: Option<String>,

@@ -1,0 +1,4 @@
+{% for item in items -%}
+{{ item.identity }}{% if item.name %} {{ item.name }}{% endif %}: {{ item.content }}
+{% endfor -%}
+ASSISTANT:
