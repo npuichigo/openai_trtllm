@@ -26,6 +26,7 @@ opentelemetry_sdk = { version = "0.21.1", features = ["rt-tokio", "logs"] }
 opentelemetry-otlp = { version = "0.14.0", features = ["tonic", "metrics", "logs"]  }
 opentelemetry-semantic-conventions = { version = "0.13.0" }
 axum-tracing-opentelemetry = "0.16.0"
+liquid = "0.26.4"
 
 [build-dependencies]
 anyhow = "1.0.75"

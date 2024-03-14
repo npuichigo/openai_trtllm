@@ -1,0 +1,16 @@
+{% for item in items -%}
+{%- capture identity -%}
+    {%- case item.identity -%}
+        {%- when "System", "Tool" -%}
+            Robot
+        {%- when "User" -%}
+            Customer
+        {%- when "Assistant" -%}
+            Support
+        {%- else -%}
+    {%- endcase -%}
+{%- endcapture -%}
+
+{{- identity }}{% if item.name %} {{ item.name }}{% endif %}: {{ item.content }}
+{% endfor -%}
+ASSISTANT:

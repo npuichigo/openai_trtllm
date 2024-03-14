@@ -17,4 +17,14 @@ pub struct Config {
     #[arg(long, short)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub otlp_endpoint: Option<String>,
+
+    /// Template for converting OpenAI message history to prompt
+    #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history_template: Option<String>,
+
+    /// File containing the history template string
+    #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub history_template_file: Option<String>
 }

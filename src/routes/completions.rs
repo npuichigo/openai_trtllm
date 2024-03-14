@@ -19,33 +19,34 @@ use tracing::instrument;
 use uuid::Uuid;
 
 use crate::error::AppError;
+use crate::state::AppState;
 use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
 use crate::triton::request::{Builder, InferTensorData};
 use crate::triton::telemetry::propagate_context;
 use crate::triton::ModelInferRequest;
 use crate::utils::{deserialize_bytes_tensor, string_or_seq_string};
 
-#[instrument(name = "completions", skip(client, request))]
+#[instrument(name = "completions", skip(grpc_client, request))]
 pub(crate) async fn compat_completions(
     headers: HeaderMap,
-    client: State<GrpcInferenceServiceClient<Channel>>,
+    State(AppState{ grpc_client, .. }): State<AppState>,
     request: Json<CompletionCreateParams>,
 ) -> Response {
     tracing::info!("request: {:?}", request);
 
     if request.stream {
-        completions_stream(headers, client, request)
+        completions_stream(headers, grpc_client, request)
             .await
             .into_response()
     } else {
-        completions(headers, client, request).await.into_response()
+        completions(headers, grpc_client, request).await.into_response()
     }
 }
 
 #[instrument(name = "streaming completions", skip(client, request))]
 async fn completions_stream(
     headers: HeaderMap,
-    State(mut client): State<GrpcInferenceServiceClient<Channel>>,
+    mut client: GrpcInferenceServiceClient<Channel>,
     Json(request): Json<CompletionCreateParams>,
 ) -> Result<Sse<impl Stream<Item = anyhow::Result<Event>>>, AppError> {
     let id = format!("cmpl-{}", Uuid::new_v4());
@@ -131,7 +132,7 @@ async fn completions_stream(
 #[instrument(name = "non-streaming completions", skip(client, request), err(Debug))]
 async fn completions(
     headers: HeaderMap,
-    State(mut client): State<GrpcInferenceServiceClient<Channel>>,
+    mut client: GrpcInferenceServiceClient<Channel>,
     Json(request): Json<CompletionCreateParams>,
 ) -> Result<Json<Completion>, AppError> {
     let model_name = request.model.clone();
