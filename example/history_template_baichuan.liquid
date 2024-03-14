@@ -1,0 +1,14 @@
+{% for item in items -%}
+{%- capture identity -%}
+    {%- case item.identity -%}
+        {%- when "User" -%}
+            <reserved_106>
+        {%- when "Assistant" -%}
+            <reserved_107>
+        {%- else -%}
+    {%- endcase -%}
+{%- endcapture -%}
+
+{{- identity }}{% if item.name %} {{ item.name }}{% endif %}: {{ item.content }}
+{% endfor -%}
+<reserved_107>:
