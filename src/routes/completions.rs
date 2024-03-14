@@ -29,7 +29,7 @@ use crate::utils::{deserialize_bytes_tensor, string_or_seq_string};
 #[instrument(name = "completions", skip(grpc_client, request))]
 pub(crate) async fn compat_completions(
     headers: HeaderMap,
-    State(AppState{ grpc_client, .. }): State<AppState>,
+    State(AppState { grpc_client, .. }): State<AppState>,
     request: Json<CompletionCreateParams>,
 ) -> Response {
     tracing::info!("request: {:?}", request);
@@ -39,7 +39,9 @@ pub(crate) async fn compat_completions(
             .await
             .into_response()
     } else {
-        completions(headers, grpc_client, request).await.into_response()
+        completions(headers, grpc_client, request)
+            .await
+            .into_response()
     }
 }
 
