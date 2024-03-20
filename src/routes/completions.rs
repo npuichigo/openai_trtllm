@@ -91,6 +91,7 @@ async fn completions_stream(
             let content = deserialize_bytes_tensor(raw_content)?
                 .into_iter()
                 .collect::<String>();
+            tracing::debug!("deserialized triton infer response content: {:?}", content);
 
             if !content.is_empty() {
                 let response = Completion {
@@ -166,6 +167,8 @@ async fn completions(
 
         let raw_content = infer_response.raw_output_contents[0].clone();
         let content = deserialize_bytes_tensor(raw_content)?.into_iter().collect();
+        tracing::debug!("deserialized triton infer response content: {:?}", content);
+
         contents.push(content);
     }
 
