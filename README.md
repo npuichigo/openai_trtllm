@@ -37,7 +37,7 @@ cargo run --release
 
 The parameters can be set with environment variables or command line arguments:
 
-**Notice: `openai_trtllm` communicate with `triton` over gRPC, so the `--triton-endpoint` should be the gRPC port.
+**Notice: `openai_trtllm` communicate with `triton` over gRPC, so the `--triton-endpoint` should be the gRPC port.**
 
 ```bash
 ./target/release/openai_trtllm --help
