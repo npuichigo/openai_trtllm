@@ -37,6 +37,8 @@ cargo run --release
 
 The parameters can be set with environment variables or command line arguments:
 
+**Notice: `openai_trtllm` communicate with `triton` over gRPC, so the `--triton-endpoint` should be the gRPC port.
+
 ```bash
 ./target/release/openai_trtllm --help
 Usage: openai_trtllm [OPTIONS]
@@ -44,7 +46,7 @@ Usage: openai_trtllm [OPTIONS]
 Options:
   -H, --host <HOST>                        Host to bind to [default: 0.0.0.0]
   -p, --port <PORT>                        Port to bind to [default: 3000]
-  -t, --triton-endpoint <TRITON_ENDPOINT>  [default: http://localhost:16001]
+  -t, --triton-endpoint <TRITON_ENDPOINT>  [default: http://localhost:8001]
   -o, --otlp-endpoint <OTLP_ENDPOINT>      Endpoint of OpenTelemetry collector
   -h, --help                               Print help
 ```
