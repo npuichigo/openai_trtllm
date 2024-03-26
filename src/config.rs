@@ -10,7 +10,7 @@ pub struct Config {
     #[arg(long, short, default_value_t = 3000)]
     pub port: usize,
 
-    #[arg(long, short, default_value_t = String::from("http://localhost:16001"))]
+    #[arg(long, short, default_value_t = String::from("http://localhost:8001"), help = "Triton gRPC endpoint")]
     pub triton_endpoint: String,
 
     /// Endpoint of OpenTelemetry collector
