@@ -6,11 +6,13 @@ pub struct Config {
     /// Host to bind to
     #[arg(long, short = 'H', default_value_t = String::from("0.0.0.0"))]
     pub host: String,
+
     /// Port to bind to
     #[arg(long, short, default_value_t = 3000)]
     pub port: usize,
 
-    #[arg(long, short, default_value_t = String::from("http://localhost:8001"), help = "Triton gRPC endpoint")]
+    /// Triton gRPC endpoint
+    #[arg(long, short, default_value_t = String::from("http://localhost:8001"))]
     pub triton_endpoint: String,
 
     /// Endpoint of OpenTelemetry collector
