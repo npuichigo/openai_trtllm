@@ -44,13 +44,23 @@ The parameters can be set with environment variables or command line arguments:
 Usage: openai_trtllm [OPTIONS]
 
 Options:
-  -H, --host <HOST>                        Host to bind to [default: 0.0.0.0]
-  -p, --port <PORT>                        Port to bind to [default: 3000]
-  -t, --triton-endpoint <TRITON_ENDPOINT>  [default: http://localhost:8001]
-  -o, --otlp-endpoint <OTLP_ENDPOINT>      Endpoint of OpenTelemetry collector
-  -h, --help                               Print help
+  -H, --host <HOST>
+          Host to bind to [default: 0.0.0.0]
+  -p, --port <PORT>
+          Port to bind to [default: 3000]
+  -t, --triton-endpoint <TRITON_ENDPOINT>
+          Triton gRPC endpoint [default: http://localhost:8001]
+  -o, --otlp-endpoint <OTLP_ENDPOINT>
+          Endpoint of OpenTelemetry collector
+      --history-template <HISTORY_TEMPLATE>
+          Template for converting OpenAI message history to prompt
+      --history-template-file <HISTORY_TEMPLATE_FILE>
+          File containing the history template string
+  -h, --help
+          Print help
 ```
 
+For examples of history templates, see the [example](./example/) folder.
 ## Example
 
 We provide a model template in `models/Baichuan` to let you follow. Since we're unknown of your hardware, we don't
