@@ -1,0 +1,5 @@
+{% for item in items -%}
+<|start_header_id|>{{ item.identity }}<|end_header_id|>
+{{ item.content }}<|eot_id|>
+{% endfor -%}
+<|start_header_id|>assistant<|end_header_id|>
