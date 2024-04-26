@@ -20,7 +20,7 @@ the [official example](https://github.com/triton-inference-server/tensorrtllm_ba
 **Notice: to enable streaming, you should set decoupled to true for triton_model_repo/tensorrt_llm/config.pbtxt per the
 tutorial**
 
-Remember to clone the repository with dependencies to build the project.
+Remember to include the dependencies when cloning to build the project.
 
 ```bash
 git clone --recursive https://github.com/npuichigo/openai_trtllm.git
@@ -34,7 +34,7 @@ Make sure you have [Rust](https://www.rust-lang.org/tools/install) installed.
 cargo run --release
 ```
 
-The parameters can be set with environment variables (prefixed by OPENAI_TRTLLM_) or command line arguments:
+The executable arguments can be set from environment variables (prefixed by OPENAI_TRTLLM_) or command line:
 
 **Notice: `openai_trtllm` communicate with `triton` over gRPC, so the `--triton-endpoint` should be the gRPC port.**
 
@@ -92,18 +92,18 @@ Since the `openai_trtllm` is compatible with OpenAI API, you can easily integrat
 [`OpenAI`](https://api.python.langchain.com/en/latest/llms/langchain_openai.llms.base.OpenAI.html#langchain_openai.llms.base.OpenAI)
 or [`ChatOpenAI`](https://api.python.langchain.com/en/latest/chat_models/langchain_openai.chat_models.base.ChatOpenAI.html#langchain_openai.chat_models.base.ChatOpenAI).
 
-Although there's
-an [TensorRT LLM integration](https://api.python.langchain.com/en/latest/llms/langchain_nvidia_trt.llms.TritonTensorRTLLM.html#langchain_nvidia_trt.llms.TritonTensorRTLLM)
-recently, it has no support for chat models yet, not to mention user defined templates.
+Although you can use the
+[TensorRT LLM integration](https://api.python.langchain.com/en/latest/llms/langchain_nvidia_trt.llms.TritonTensorRTLLM.html#langchain_nvidia_trt.llms.TritonTensorRTLLM)
+published recently, it has no support for chat models yet, not to mention user defined templates.
 
 ## Tracing
 
-We are tracing performance metrics using tracing, tracing-opentelemetry and opentelemetry-otlp crates.
+Trace is available with the support of tracing, tracing-opentelemetry and opentelemetry-otlp crates.
 
 Here is an example of tracing with Tempo on a k8s cluster:
 <img src="images/trace.png" width=600>
 
-Let's say you are running a Jaeger instance locally, you can run the following command to start it:
+To test tracing locally, let's say you use the Jaeger backend.
 
 ```bash
 docker run --rm --name jaeger \
