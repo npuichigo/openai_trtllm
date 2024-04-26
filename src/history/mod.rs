@@ -145,7 +145,7 @@ ASSISTANT:"
     pub fn test_template_file() {
         let template = None;
         let template_file = Some(format!(
-            "{}/example/history_template.liquid",
+            "{}/templates/history_template.liquid",
             env!("CARGO_MANIFEST_DIR")
         ));
         let builder = HistoryBuilder::new(&template, &template_file)
@@ -197,7 +197,7 @@ ASSISTANT:"
     pub fn test_template_file_custom_roles() {
         let template = None;
         let template_file = Some(format!(
-            "{}/example/history_template_custom_roles.liquid",
+            "{}/templates/history_template_custom_roles.liquid",
             env!("CARGO_MANIFEST_DIR")
         ));
         let builder = HistoryBuilder::new(&template, &template_file)
