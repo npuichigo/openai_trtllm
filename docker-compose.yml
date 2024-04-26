@@ -21,14 +21,12 @@ services:
 
   # Triton backend for TensorRT LLM
   tensorrtllm_backend:
-    image: npuichigo/tritonserver:711a28d
+    image: nvcr.io/nvidia/tritonserver:24.03-trtllm-python-py3
     command:
       - "tritonserver"
-      - "--model-repository=/models/baichuan"
-      - "--disable-auto-complete-config"
-      - "--backend-config=python,shm-region-prefix-name=prefix0_:"
+      - "--model-repository=/models"
     volumes:
-      - ./models:/models
+      - /path/to/model_repository:/models
     ports:
       - "8000:8000"
       - "8001:8001"
