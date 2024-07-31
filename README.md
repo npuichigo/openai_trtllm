@@ -55,6 +55,8 @@ Options:
           Template for converting OpenAI message history to prompt
       --history-template-file <HISTORY_TEMPLATE_FILE>
           File containing the history template string
+      --api-key <API_KEY>
+          Api Key to access the server
   -h, --help
           Print help
 ```

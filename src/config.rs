@@ -29,4 +29,9 @@ pub struct Config {
     #[arg(long)]
     #[serde(skip_serializing_if = "Option::is_none")]
     pub history_template_file: Option<String>,
+
+    /// Api Key to access the server
+    #[arg(long)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub api_key: Option<String>,
 }
