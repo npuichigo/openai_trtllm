@@ -1,6 +1,10 @@
 use anyhow::Context;
 use axum::routing::{get, post};
 use axum::Router;
+use axum::middleware::{self, Next};
+use axum::http::{Request, StatusCode};
+use axum::response::Response;
+use axum::body::Body;
 use axum_tracing_opentelemetry::middleware::OtelAxumLayer;
 
 use crate::config::Config;
@@ -8,6 +12,25 @@ use crate::history::HistoryBuilder;
 use crate::routes;
 use crate::state::AppState;
 use crate::triton::grpc_inference_service_client::GrpcInferenceServiceClient;
+
+async fn auth_middleware(
+    req: Request<Body>,
+    next: Next,
+    api_key: Option<String>,
+) -> Result<Response, StatusCode> {
+    if let Some(ref key) = api_key {
+        if let Some(auth_header) = req.headers().get("Authorization") {
+            if let Ok(auth_str) = auth_header.to_str() {
+                if auth_str == format!("Bearer {}", key) {
+                    return Ok(next.run(req).await);
+                }
+            }
+        }
+        Err(StatusCode::UNAUTHORIZED)
+    } else {
+        Ok(next.run(req).await)
+    }
+}
 
 pub async fn run_server(config: Config) -> anyhow::Result<()> {
     tracing::info!("Connecting to triton endpoint: {}", config.triton_endpoint);
@@ -22,15 +45,20 @@ pub async fn run_server(config: Config) -> anyhow::Result<()> {
         history_builder,
     };
 
+    let api_key = config.api_key.clone();
+
     let app = Router::new()
         .route("/v1/completions", post(routes::compat_completions))
         .route(
             "/v1/chat/completions",
             post(routes::compat_chat_completions),
         )
+        .route("/health_check", get(routes::health_check))
         .with_state(state)
         .layer(OtelAxumLayer::default())
-        .route("/health_check", get(routes::health_check));
+        .layer(middleware::from_fn(move |req, next| {
+            auth_middleware(req, next, api_key.clone())
+        }));
 
     let address = format!("{}:{}", config.host, config.port);
     tracing::info!("Starting server at {}", address);
