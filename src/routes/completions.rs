@@ -219,7 +219,7 @@ fn build_triton_request(request: CompletionCreateParams) -> anyhow::Result<Model
         )
         .input(
             "stop_words",
-            [1, 1],
+            [1, request.stop.as_ref().map_or(1, |s| s.len() as i64)],
             InferTensorData::Bytes(
                 request
                     .stop
